@@ -20,7 +20,7 @@ package netvr;
 
 import com.bulletphysics.collision.broadphase.AxisSweep3;
 import com.bulletphysics.collision.broadphase.BroadphaseInterface;
-import com.bulletphysics.collision.shapes.simple.BoxShape;
+import com.bulletphysics.collision.shapes.simple.CylinderShapeX;
 import com.bulletphysics.dynamics.DiscreteDynamicsWorld;
 import com.bulletphysics.dynamics.DynamicsWorld;
 import com.bulletphysics.linearmath.Transform;
@@ -59,6 +59,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import javax.vecmath.AxisAngle4f;
+import javax.vecmath.Quat4f;
 import javax.vecmath.Vector3f;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -67,6 +69,8 @@ import java.awt.event.MouseWheelListener;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Path2D;
 import java.util.List;
+
+import static java.lang.Math.abs;
 
 /**
  * A rough graphical user interface for visualizing the OSM graph. Mainly for debugging algorithms
@@ -81,69 +85,26 @@ import java.util.List;
 class GraphHopperGL {
 
 
-    private static GraphHopperConfig config(String[] args) {
-        PMap a = PMap.read(args);
-        a.putObject("datareader.file", a.getString("datareader.file", "/home/me/graphhopper/core/files/monaco.osm.gz"));
-        a.putObject("graph.location", a.getString("graph.location", "/home/me/graphhopper/tools/target/mini-graph-ui-gh"));
-        a.putObject("graph.flag_encoders", a.getString("graph.flag_encoders", "car"));
-
-        return config(a);
-    }
-
     private static final Logger logger = LoggerFactory.getLogger(GraphHopperGL.class);
-
-    private GraphicsWrapper mg;
-
+    //private final boolean showTiles = false;
+    private static final boolean plotNodes = true;
+    private static final boolean useCH = false;
+    private static final Color[] speedColors = generateColors(15);
     private final GraphHopper hopper;
     private final Graph graph;
     private final LocationIndexTree index;
-    private final NodeAccess na;
+    private final NodeAccess n;
     private final DecimalEncodedValue avSpeedEnc;
     private final BooleanEncodedValue accessEnc;
-
-
-    private Path path;
-    private final boolean showTiles = false;
-    private static final boolean plotNodes = true;
-    private static final boolean useCH = false;
-
-    private static final Color[] speedColors = generateColors(15);
-
-    private volatile int currentPosX;
-    private volatile int currentPosY;
-    private volatile Snap fromRes, toRes;
-
-
-    private GraphHopperGL(GraphHopper hopper) {
-        this.hopper = hopper;
-        this.graph = hopper.getGraphHopperStorage();
-        this.na = graph.getNodeAccess();
-
-        FlagEncoder encoder = hopper.getEncodingManager().fetchEdgeEncoders().get(0);
-        avSpeedEnc = encoder.getAverageSpeedEnc();
-        accessEnc = encoder.getAccessEnc();
-
-
-        mg = new GraphicsWrapper(graph);
-
-        // prepare node quadtree to 'enter' the graph. create a 313*313 grid => <3km
-//         this.index = new DebugLocation2IDQuadtree(roadGraph, mg);
-        this.index = (LocationIndexTree) hopper.getLocationIndex();
-    }
-
-
-    private GraphHopperGL(GraphHopperConfig c) {
-        this(new GraphHopperOSM().init(c).importOrLoad());
-    }
-
-    public GraphHopperGL(String... args) {
-        this(config(args));
-    }
-
+    private GraphicsWrapper mg;
     MouseWheelListener mouseWheelScale = e -> {
         mg.scale(e.getX(), e.getY(), e.getWheelRotation() < 0);
         repaint();
     };
+    private Path path;
+    private volatile int currentPosX;
+    private volatile int currentPosY;
+    private volatile Snap fromRes, toRes;
     MouseAdapter mouseGestures = new MouseAdapter() {
         // for routing:
         double fromLat, fromLon;
@@ -205,6 +166,41 @@ class GraphHopperGL {
         }
     };
 
+
+    private GraphHopperGL(GraphHopper hopper) {
+        this.hopper = hopper;
+        this.graph = hopper.getGraphHopperStorage();
+        this.n = graph.getNodeAccess();
+
+        FlagEncoder encoder = hopper.getEncodingManager().fetchEdgeEncoders().get(0);
+        avSpeedEnc = encoder.getAverageSpeedEnc();
+        accessEnc = encoder.getAccessEnc();
+
+
+        mg = new GraphicsWrapper(graph);
+
+        // prepare node quadtree to 'enter' the graph. create a 313*313 grid => <3km
+//         this.index = new DebugLocation2IDQuadtree(roadGraph, mg);
+        this.index = (LocationIndexTree) hopper.getLocationIndex();
+    }
+
+    private GraphHopperGL(GraphHopperConfig c) {
+        this(new GraphHopperOSM().init(c).importOrLoad());
+    }
+
+    public GraphHopperGL(String... args) {
+        this(config(args));
+    }
+
+    private static GraphHopperConfig config(String[] args) {
+        PMap a = PMap.read(args);
+        a.putObject("datareader.file", a.getString("datareader.file", "/home/me/graphhopper/core/files/monaco.osm.gz"));
+        a.putObject("graph.location", a.getString("graph.location", "/home/me/graphhopper/tools/target/mini-graph-ui-gh"));
+        a.putObject("graph.flag_encoders", a.getString("graph.flag_encoders", "car"));
+
+        return config(a);
+    }
+
     /**
      * a default config
      */
@@ -226,6 +222,22 @@ class GraphHopperGL {
             cols[i] = Color.getHSBColor(i / ((float) n), 0.85f, 1.0f);
         }
         return cols;
+    }
+
+    private static RoutingAlgorithm routerRendered(Graph g, AlgorithmOptions opts, RoutingAlgorithm algo) {
+        final Weighting w = opts.getWeighting();
+        final TraversalMode t = opts.getTraversalMode();
+
+        if (algo instanceof AStarBidirection) {
+            return new RoutingRenderer.AStarBiRoutingRenderer(g, w, t).setApproximation(((AStarBidirection) algo).getApproximation());
+        } else if (algo instanceof AStar) {
+            return new RoutingRenderer.AStarRoutingRenderer(g, w, t);
+        } else if (algo instanceof DijkstraBidirectionRef) {
+            return new RoutingRenderer.DijkstraBidirectionRoutingRenderer(g, w, t);
+        } else if (algo instanceof Dijkstra) {
+            return new RoutingRenderer.DijkstraSimpleRoutingRenderer(g, w, t);
+        } else
+            throw new UnsupportedOperationException();
     }
 
     public void paintQuery(final Graphics2D g2) {
@@ -261,6 +273,33 @@ class GraphHopperGL {
         mg.plotPath(path, g2, 4);
     }
 
+    public void paintTiles(final Graphics2D g2) {
+        g2.setColor(Color.GRAY);
+
+        index.query(graph.getBounds(), new LocationIndexTree.Visitor() {
+            @Override
+            public boolean isTileInfo() {
+                return true;
+            }
+
+            @Override
+            public void onTile(BBox bbox, int depth) {
+                int width = Math.max(1, Math.min(4, 4 - depth));
+                mg.plotEdge(g2, bbox.minLat, bbox.minLon, bbox.minLat, bbox.maxLon, width);
+                mg.plotEdge(g2, bbox.minLat, bbox.maxLon, bbox.maxLat, bbox.maxLon, width);
+                mg.plotEdge(g2, bbox.maxLat, bbox.maxLon, bbox.maxLat, bbox.minLon, width);
+                mg.plotEdge(g2, bbox.maxLat, bbox.minLon, bbox.minLat, bbox.minLon, width);
+            }
+
+            @Override
+            public void onNode(int node) {
+                //mg.plotNode(g2, node, Color.BLUE);
+            }
+        });
+
+
+    }
+
     public void paintRoads(final Graphics2D g2) {
 
         Rectangle d = null; //getBounds();
@@ -268,48 +307,22 @@ class GraphHopperGL {
 
         g2.setColor(Color.black);
 
-
         AllEdgesIterator edge = graph.getAllEdges();
         while (edge.next()) {
 
             int i = edge.getBaseNode();
-            double lat = na.getLatitude(i);
-            double lon = na.getLongitude(i);
+            double lat = n.getLatitude(i);
+            double lon = n.getLongitude(i);
 
             int j = edge.getAdjNode();
-            double lat2 = na.getLatitude(j);
-            double lon2 = na.getLongitude(j);
+            double lat2 = n.getLatitude(j);
+            double lon2 = n.getLongitude(j);
 
             if (b.contains(lat, lon) || b.contains(lat2, lon2))
                 plotEdge(g2, edge);
         }
 
-        if (showTiles) {
-            index.query(graph.getBounds(), new LocationIndexTree.Visitor() {
-                @Override
-                public boolean isTileInfo() {
-                    return true;
-                }
 
-                @Override
-                public void onTile(BBox bbox, int depth) {
-                    int width = Math.max(1, Math.min(4, 4 - depth));
-                    g2.setColor(Color.GRAY);
-                    mg.plotEdge(g2, bbox.minLat, bbox.minLon, bbox.minLat, bbox.maxLon, width);
-                    mg.plotEdge(g2, bbox.minLat, bbox.maxLon, bbox.maxLat, bbox.maxLon, width);
-                    mg.plotEdge(g2, bbox.maxLat, bbox.maxLon, bbox.maxLat, bbox.minLon, width);
-                    mg.plotEdge(g2, bbox.maxLat, bbox.minLon, bbox.minLat, bbox.minLon, width);
-                }
-
-                @Override
-                public void onNode(int node) {
-                    //mg.plotNode(g2, node, Color.BLUE);
-                }
-            });
-
-        }
-
-        g2.setColor(Color.BLACK);
     }
 
     private void plotEdge(Graphics2D g2, AllEdgesIterator edge) {
@@ -344,8 +357,6 @@ class GraphHopperGL {
                 edge.fetchWayGeometry(FetchMode.ALL));
     }
 
-
-
     private RoutingAlgorithm router(GraphHopper hopper) {
         Profile profile = hopper.getProfiles().iterator().next();
         if (useCH) {
@@ -370,25 +381,6 @@ class GraphHopperGL {
             return algoFactory.createAlgo(qGraph, algoOpts);
         }
     }
-
-    private static RoutingAlgorithm routerRendered(Graph g, AlgorithmOptions opts, RoutingAlgorithm algo) {
-        final Weighting w = opts.getWeighting();
-        final TraversalMode t = opts.getTraversalMode();
-
-        if (algo instanceof AStarBidirection) {
-            return new RoutingRenderer.AStarBiRoutingRenderer(g, w, t).setApproximation(((AStarBidirection) algo).getApproximation());
-        } else if (algo instanceof AStar) {
-            return new RoutingRenderer.AStarRoutingRenderer(g, w, t);
-        } else if (algo instanceof DijkstraBidirectionRef) {
-            return new RoutingRenderer.DijkstraBidirectionRoutingRenderer(g, w, t);
-        } else if (algo instanceof Dijkstra) {
-            return new RoutingRenderer.DijkstraSimpleRoutingRenderer(g, w, t);
-        } else
-            throw new UnsupportedOperationException();
-    }
-
-
-
 
     private void position(MouseEvent e) {
 //        latLon = mg.getLat(e.getY()) + "," + mg.getLon(e.getX());
@@ -415,19 +407,91 @@ class GraphHopperGL {
                 // Don't make the world AABB size too large, it will harm simulation
                 // quality and performance
                 Vector3f worldAabbMin = new Vector3f(-10000, -10000, -10000),
-                         worldAabbMax = new Vector3f(10000, 10000, 10000);
-                int maxProxies = 1024;
+                        worldAabbMax = new Vector3f(10000, 10000, 10000);
+                int maxProxies = 16*1024;
 
                 BroadphaseInterface b =
-                    new AxisSweep3(worldAabbMin, worldAabbMax, maxProxies);
-                    //new SimpleBroadphase(maxProxies);
+                        new AxisSweep3(worldAabbMin, worldAabbMax, maxProxies);
+                //new SimpleBroadphase(maxProxies);
 
                 DynamicsWorld w = new DiscreteDynamicsWorld(b);
+                w.setGravity(new Vector3f());
 
-                w.localCreateRigidBody(1, new Transform(), new BoxShape(new Vector3f(1,1,1)));
+                //w.localCreateRigidBody(1, new Transform(), new BoxShape(new Vector3f(1,1,1)));
+
+                buildRoads(w);
+
                 return w;
             }
         }, w, h);
+    }
+
+    private void buildRoads(DynamicsWorld w) {
+        int max = 4900, c = 0;
+
+        final BBox bb = graph.getBounds();
+        double latMax = bb.maxLat;
+        double latMin = bb.minLat;
+        double lonMax = bb.maxLon;
+        double lonMin = bb.minLon;
+        double latR = (latMax-latMin);
+        double lonR = (lonMax-lonMin);
+
+        AllEdgesIterator edge = graph.getAllEdges();
+        while (edge.next()) {
+
+            int i = edge.getBaseNode();
+            double lat = n.getLatitude(i);
+            double lon = n.getLongitude(i);
+
+            int j = edge.getAdjNode();
+            double lat2 = n.getLatitude(j);
+            double lon2 = n.getLongitude(j);
+
+            //plotEdge(g2, edge);
+
+            //normalize
+            lon = (lon - lonMin)/lonR;
+            lon2 = (lon2 - lonMin)/lonR;
+            lat = (lat - latMin)/latR;
+            lat2 = (lat2 - latMin)/latR;
+
+
+            //HACK temporary hard-filter
+            final double r = 0.1;
+            if (lon >= -r && lat >= -r && lon <= r && lat <= r) {
+                if (lon2 >= -r && lat2 >= -r && lon2 <= r && lat2 <= r) {
+
+                    double scale = 400;
+                    lon *= scale;
+                    lat *= scale;
+                    lon2 *= scale;
+                    lat2 *= scale;
+                    float cx = (float) ((lon + lon2) / 2);
+                    float cy = (float) ((lat + lat2) / 2);
+
+                    final Transform t = new Transform();
+
+
+                    final Quat4f rot = new Quat4f();
+                    rot.set(new AxisAngle4f(0, 0, 1,
+                            (float) Math.atan2(lat2 - lat, lon2 - lon)));
+                    t.setRotation(rot);
+
+                    t.origin.set(cx - 20, cy - 33, 0);
+
+                    double dx = abs(lat - lat2);
+                    double dy = abs(lon - lon2);
+                    float length = (float) Math.sqrt(dx * dx + dy * dy);
+                    float thick = 0.1f; //length / 3; //HACK
+
+                    w.localCreateRigidBody(1, t, new CylinderShapeX(
+                            new Vector3f(length / 2, thick/2, thick/2)));
+
+                    if (++c >= max) break;
+                }
+            }
+        }
     }
 
 
@@ -481,6 +545,7 @@ class GraphHopperGL {
             logger.info("dist:{}, path points({})", tmpPath.getDistance(), p);
             return tmpPath;
         }
+
         void plotNodeName(Graphics2D g2, int node) {
             double lat = na.getLatitude(node);
             double lon = na.getLongitude(node);
