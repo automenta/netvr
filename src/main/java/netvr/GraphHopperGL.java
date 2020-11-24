@@ -18,6 +18,9 @@
 package netvr;
 
 
+import com.bulletphysics.dynamics.DynamicsWorld;
+import com.bulletphysics.ui.JOGL;
+import com.bulletphysics.ui.SpaceGraph3D;
 import com.carrotsearch.hppc.IntIndexedContainer;
 import com.graphhopper.GraphHopper;
 import com.graphhopper.GraphHopperConfig;
@@ -396,7 +399,13 @@ public class GraphHopperGL {
     }
 
     public void window(int i, int i1) {
+        new JOGL(new SpaceGraph3D() {
 
+            @Override
+            protected DynamicsWorld physics() {
+                return null;
+            }
+        }, 800, 800);
     }
 
 
