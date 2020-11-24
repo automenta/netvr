@@ -28,7 +28,7 @@ import com.graphhopper.util.EdgeIteratorState;
 /**
  * @author Peter Karich
  */
-public interface RoutingRenderer {
+interface RoutingRenderer {
 
     /**
      * @author Peter Karich

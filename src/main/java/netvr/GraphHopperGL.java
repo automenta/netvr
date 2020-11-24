@@ -18,7 +18,12 @@
 package netvr;
 
 
+import com.bulletphysics.collision.broadphase.AxisSweep3;
+import com.bulletphysics.collision.broadphase.BroadphaseInterface;
+import com.bulletphysics.collision.shapes.simple.BoxShape;
+import com.bulletphysics.dynamics.DiscreteDynamicsWorld;
 import com.bulletphysics.dynamics.DynamicsWorld;
+import com.bulletphysics.linearmath.Transform;
 import com.bulletphysics.ui.JOGL;
 import com.bulletphysics.ui.SpaceGraph3D;
 import com.carrotsearch.hppc.IntIndexedContainer;
@@ -54,6 +59,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import javax.vecmath.Vector3f;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -72,7 +78,7 @@ import java.util.List;
  *
  * @author Peter Karich
  */
-public class GraphHopperGL {
+class GraphHopperGL {
 
 
     private static GraphHopperConfig config(String[] args) {
@@ -86,7 +92,7 @@ public class GraphHopperGL {
 
     private static final Logger logger = LoggerFactory.getLogger(GraphHopperGL.class);
 
-    GraphicsWrapper mg;
+    private GraphicsWrapper mg;
 
     private final GraphHopper hopper;
     private final Graph graph;
@@ -96,18 +102,19 @@ public class GraphHopperGL {
     private final BooleanEncodedValue accessEnc;
 
 
-    Path path;
-    final boolean showTiles = false;
-    static final boolean plotNodes = true;
+    private Path path;
+    private final boolean showTiles = false;
+    private static final boolean plotNodes = true;
     private static final boolean useCH = false;
 
     private static final Color[] speedColors = generateColors(15);
 
-    volatile int currentPosX, currentPosY;
+    private volatile int currentPosX;
+    private volatile int currentPosY;
     private volatile Snap fromRes, toRes;
 
 
-    public GraphHopperGL(GraphHopper hopper) {
+    private GraphHopperGL(GraphHopper hopper) {
         this.hopper = hopper;
         this.graph = hopper.getGraphHopperStorage();
         this.na = graph.getNodeAccess();
@@ -125,7 +132,7 @@ public class GraphHopperGL {
     }
 
 
-    public GraphHopperGL(GraphHopperConfig c) {
+    private GraphHopperGL(GraphHopperConfig c) {
         this(new GraphHopperOSM().init(c).importOrLoad());
     }
 
@@ -213,7 +220,7 @@ public class GraphHopperGL {
         return c;
     }
 
-    public static Color[] generateColors(int n) {
+    private static Color[] generateColors(int n) {
         Color[] cols = new Color[n];
         for (int i = 0; i < n; i++) {
             cols[i] = Color.getHSBColor(i / ((float) n), 0.85f, 1.0f);
@@ -383,7 +390,7 @@ public class GraphHopperGL {
 
 
 
-    void position(MouseEvent e) {
+    private void position(MouseEvent e) {
 //        latLon = mg.getLat(e.getY()) + "," + mg.getLon(e.getX());
 //        infoPanel.repaint();
         currentPosX = e.getX();
@@ -394,18 +401,33 @@ public class GraphHopperGL {
 //        repaint(false, true);
 //    }
 
-    void repaint() {
+    private void repaint() {
 
     }
 
-    public void window(int i, int i1) {
+    public void window(int w, int h) {
         new JOGL(new SpaceGraph3D() {
-
             @Override
             protected DynamicsWorld physics() {
-                return null;
+
+                // the maximum size of the collision world. Make sure objects stay
+                // within these boundaries
+                // Don't make the world AABB size too large, it will harm simulation
+                // quality and performance
+                Vector3f worldAabbMin = new Vector3f(-10000, -10000, -10000),
+                         worldAabbMax = new Vector3f(10000, 10000, 10000);
+                int maxProxies = 1024;
+
+                BroadphaseInterface b =
+                    new AxisSweep3(worldAabbMin, worldAabbMax, maxProxies);
+                    //new SimpleBroadphase(maxProxies);
+
+                DynamicsWorld w = new DiscreteDynamicsWorld(b);
+
+                w.localCreateRigidBody(1, new Transform(), new BoxShape(new Vector3f(1,1,1)));
+                return w;
             }
-        }, 800, 800);
+        }, w, h);
     }
 
 
@@ -418,7 +440,7 @@ public class GraphHopperGL {
         private double offsetY;
         private BBox bounds = new BBox(-180, 180, -90, 90);
 
-        public GraphicsWrapper(Graph g) {
+        GraphicsWrapper(Graph g) {
             this.na = g.getNodeAccess();
             BBox b = g.getBounds();
             scaleX = scaleY = 0.002 * (b.maxLat - b.minLat);
@@ -481,11 +503,11 @@ public class GraphHopperGL {
             }
         }
 
-        public void plotText(Graphics2D g2, double lat, double lon, String text) {
+        void plotText(Graphics2D g2, double lat, double lon, String text) {
             g2.drawString(text, (int) getX(lon) + 5, (int) getY(lat) + 5);
         }
 
-        public void plotDirectedEdge(Graphics2D g2, double lat, double lon, double lat2, double lon2, float width) {
+        void plotDirectedEdge(Graphics2D g2, double lat, double lon, double lat2, double lon2, float width) {
 
             if (width > 0)
                 g2.setStroke(new BasicStroke(width));
@@ -514,7 +536,7 @@ public class GraphHopperGL {
             }
         }
 
-        public void plotEdge(Graphics2D g2, double lat, double lon, double lat2, double lon2, float width) {
+        void plotEdge(Graphics2D g2, double lat, double lon, double lat2, double lon2, float width) {
             if (width > 0)
                 g2.setStroke(new BasicStroke(width));
             g2.drawLine((int) Math.round(getX(lon)), (int) Math.round(getY(lat)), (int) Math.round(getX(lon2)), (int) Math.round(getY(lat2)));
@@ -524,19 +546,19 @@ public class GraphHopperGL {
             plotEdge(g2, lat, lon, lat2, lon2, 1);
         }
 
-        public double getX(double lon) {
+        double getX(double lon) {
             return (lon + offsetX) / scaleX;
         }
 
-        public double getY(double lat) {
+        double getY(double lat) {
             return (90 - lat + offsetY) / scaleY;
         }
 
-        public double getLon(int x) {
+        double getLon(int x) {
             return x * scaleX - offsetX;
         }
 
-        public double getLat(int y) {
+        double getLat(int y) {
             return 90 - (y * scaleY - offsetY);
         }
 
@@ -545,15 +567,15 @@ public class GraphHopperGL {
         }
 
 
-        public void plotNode(Graphics2D g2, int loc, Color c, int size) {
+        void plotNode(Graphics2D g2, int loc, Color c, int size) {
             plotNode(g2, loc, c, size, "");
         }
 
-        public void plotNode(Graphics2D g2, int loc, Color c, int size, String text) {
+        void plotNode(Graphics2D g2, int loc, Color c, int size, String text) {
             plotNode(g2, na, loc, c, size, "");
         }
 
-        public void plotNode(Graphics2D g2, NodeAccess na, int loc, Color c, int size, String text) {
+        void plotNode(Graphics2D g2, NodeAccess na, int loc, Color c, int size, String text) {
             double lat = na.getLatitude(loc);
             if (lat < bounds.minLat || lat > bounds.maxLat)
                 return;
@@ -568,12 +590,12 @@ public class GraphHopperGL {
             g2.setColor(old);
         }
 
-        public void plot(Graphics2D g2, double lat, double lon, int width) {
+        void plot(Graphics2D g2, double lat, double lon, int width) {
             g2.fillOval((int) Math.round(getX(lon)), (int) Math.round(getY(lat)),
                     width, width);
         }
 
-        public void scale(int x, int y, boolean zoomIn) {
+        void scale(int x, int y, boolean zoomIn) {
             double tmpFactor = 0.5f;
             if (!zoomIn) {
                 tmpFactor = 2;
@@ -604,12 +626,12 @@ public class GraphHopperGL {
             logger.info("mouse wheel moved => repaint. zoomIn:{} {},{} {},{}", zoomIn, offsetX, offsetY, scaleX, scaleY);
         }
 
-        public void setNewOffset(int offX, int offY) {
+        void setNewOffset(int offX, int offY) {
             offsetX += offX * scaleX;
             offsetY += offY * scaleY;
         }
 
-        public BBox setBounds(int minX, int maxX, int minY, int maxY) {
+        BBox setBounds(int minX, int maxX, int minY, int maxY) {
             return bounds = new BBox(getLon(minX), getLon(maxX), getLat(maxY), getLat(minY));
         }
     }
