@@ -12,6 +12,7 @@
     <properties>
         <maven.compiler.source>16</maven.compiler.source>
         <maven.compiler.target>16</maven.compiler.target>
+        <graphhopper-core.version>3.0-SNAPSHOT</graphhopper-core.version>
     </properties>
 
     <dependencies>
@@ -24,21 +25,23 @@
         <dependency>
             <groupId>com.graphhopper</groupId>
             <artifactId>graphhopper-core</artifactId>
-            <version>3.0-SNAPSHOT</version>
+            <version>${graphhopper-core.version}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>com.graphhopper</groupId>
             <artifactId>graphhopper-nav</artifactId>
-            <version>3.0-SNAPSHOT</version>
+            <version>${graphhopper-core.version}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>com.graphhopper</groupId>
             <artifactId>graphhopper-reader-osm</artifactId>
-            <version>3.0-SNAPSHOT</version>
+            <version>${graphhopper-core.version}</version>
             <scope>compile</scope>
         </dependency>
+
+
     </dependencies>
 
 </project>

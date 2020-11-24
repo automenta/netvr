@@ -25,8 +25,6 @@ import com.graphhopper.storage.NodeAccess;
 import com.graphhopper.storage.RoutingCHGraph;
 import com.graphhopper.util.EdgeIteratorState;
 
-import java.awt.*;
-
 /**
  * @author Peter Karich
  */
@@ -37,7 +35,7 @@ public interface RoutingRenderer {
      */
     class AStarRoutingRenderer extends AStar implements RoutingRenderer {
 
-        private NodeAccess na;
+        private final NodeAccess na;
 
         public AStarRoutingRenderer(Graph graph, Weighting type, TraversalMode tMode) {
             super(graph, type, tMode);
@@ -84,7 +82,7 @@ public interface RoutingRenderer {
      */
     class DijkstraBidirectionRoutingRenderer extends DijkstraBidirectionRef implements RoutingRenderer {
 
-        private NodeAccess na;
+        private final NodeAccess na;
 
         public DijkstraBidirectionRoutingRenderer(Graph graph, Weighting type, TraversalMode tMode) {
             super(graph, type, tMode);

@@ -71,18 +71,19 @@ import java.util.List;
  */
 public class GraphHopperGL {
 
-    public static void main(String[] strs) {
-        PMap a = PMap.read(strs);
+
+    private static GraphHopperConfig config(String[] args) {
+        PMap a = PMap.read(args);
         a.putObject("datareader.file", a.getString("datareader.file", "/home/me/graphhopper/core/files/monaco.osm.gz"));
         a.putObject("graph.location", a.getString("graph.location", "/home/me/graphhopper/tools/target/mini-graph-ui-gh"));
         a.putObject("graph.flag_encoders", a.getString("graph.flag_encoders", "car"));
 
-        new GraphHopperGL(config(a));
+        return config(a);
     }
 
     private static final Logger logger = LoggerFactory.getLogger(GraphHopperGL.class);
 
-    GraphicsWrapper mg = null;
+    GraphicsWrapper mg;
 
     private final GraphHopper hopper;
     private final Graph graph;
@@ -93,7 +94,7 @@ public class GraphHopperGL {
 
 
     Path path;
-    boolean showTiles = false;
+    final boolean showTiles = false;
     static final boolean plotNodes = true;
     private static final boolean useCH = false;
 
@@ -125,6 +126,9 @@ public class GraphHopperGL {
         this(new GraphHopperOSM().init(c).importOrLoad());
     }
 
+    public GraphHopperGL(String... args) {
+        this(config(args));
+    }
 
     MouseWheelListener mouseWheelScale = e -> {
         mg.scale(e.getX(), e.getY(), e.getWheelRotation() < 0);
@@ -357,7 +361,7 @@ public class GraphHopperGL {
         }
     }
 
-    private RoutingAlgorithm routerRendered(Graph g, AlgorithmOptions opts, RoutingAlgorithm algo) {
+    private static RoutingAlgorithm routerRendered(Graph g, AlgorithmOptions opts, RoutingAlgorithm algo) {
         final Weighting w = opts.getWeighting();
         final TraversalMode t = opts.getTraversalMode();
 
@@ -388,6 +392,10 @@ public class GraphHopperGL {
 //    }
 
     void repaint() {
+
+    }
+
+    public void window(int i, int i1) {
 
     }
 
@@ -584,8 +592,7 @@ public class GraphHopperGL {
                 offsetY += y * oldScaleY;
             }
 
-            logger.info("mouse wheel moved => repaint. zoomIn:" + zoomIn + " " + offsetX + "," + offsetY
-                    + " " + scaleX + "," + scaleY);
+            logger.info("mouse wheel moved => repaint. zoomIn:{} {},{} {},{}", zoomIn, offsetX, offsetY, scaleX, scaleY);
         }
 
         public void setNewOffset(int offX, int offY) {
