@@ -20,12 +20,14 @@ package netvr;
 
 import com.bulletphysics.collision.broadphase.AxisSweep3;
 import com.bulletphysics.collision.broadphase.BroadphaseInterface;
-import com.bulletphysics.collision.shapes.simple.CylinderShapeX;
+import com.bulletphysics.collision.broadphase.Dbvt;
+import com.bulletphysics.collision.broadphase.DbvtAabbMm;
+import com.bulletphysics.collision.shapes.simple.BoxShape;
 import com.bulletphysics.dynamics.DiscreteDynamicsWorld;
 import com.bulletphysics.dynamics.DynamicsWorld;
 import com.bulletphysics.linearmath.Transform;
+import com.bulletphysics.ui.DemoApplication;
 import com.bulletphysics.ui.JOGL;
-import com.bulletphysics.ui.SpaceGraph3D;
 import com.carrotsearch.hppc.IntIndexedContainer;
 import com.graphhopper.GraphHopper;
 import com.graphhopper.GraphHopperConfig;
@@ -55,12 +57,12 @@ import com.graphhopper.util.Parameters.Algorithms;
 import com.graphhopper.util.PointList;
 import com.graphhopper.util.StopWatch;
 import com.graphhopper.util.shapes.BBox;
+import com.jogamp.opengl.GL2;
+import com.jogamp.opengl.GLAutoDrawable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
-import javax.vecmath.AxisAngle4f;
-import javax.vecmath.Quat4f;
 import javax.vecmath.Vector3f;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -69,8 +71,6 @@ import java.awt.event.MouseWheelListener;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Path2D;
 import java.util.List;
-
-import static java.lang.Math.abs;
 
 /**
  * A rough graphical user interface for visualizing the OSM graph. Mainly for debugging algorithms
@@ -90,6 +90,7 @@ class GraphHopperGL {
     private static final boolean plotNodes = true;
     private static final boolean useCH = false;
     private static final Color[] speedColors = generateColors(15);
+    final Dbvt<WayVis> ways = new Dbvt<>();
     private final GraphHopper hopper;
     private final Graph graph;
     private final LocationIndexTree index;
@@ -102,8 +103,8 @@ class GraphHopperGL {
         repaint();
     };
     private Path path;
-    private volatile int currentPosX;
-    private volatile int currentPosY;
+//    private volatile int currentPosX;
+//    private volatile int currentPosY;
     private volatile Snap fromRes, toRes;
     MouseAdapter mouseGestures = new MouseAdapter() {
         // for routing:
@@ -138,7 +139,7 @@ class GraphHopperGL {
         public void mouseDragged(MouseEvent e) {
             dragging = true;
             update(e);
-            position(e);
+//            position(e);
         }
 
         @Override
@@ -151,21 +152,20 @@ class GraphHopperGL {
         }
 
         void update(MouseEvent e) {
-            mg.setNewOffset(e.getX() - currentPosX, e.getY() - currentPosY);
+//            mg.setNewOffset(e.getX() - currentPosX, e.getY() - currentPosY);
             repaint();
         }
 
-        @Override
-        public void mouseMoved(MouseEvent e) {
-            position(e);
-        }
-
-        @Override
-        public void mousePressed(MouseEvent e) {
-            position(e);
-        }
+//        @Override
+//        public void mouseMoved(MouseEvent e) {
+//            position(e);
+//        }
+//
+//        @Override
+//        public void mousePressed(MouseEvent e) {
+//            position(e);
+//        }
     };
-
 
     private GraphHopperGL(GraphHopper hopper) {
         this.hopper = hopper;
@@ -382,15 +382,15 @@ class GraphHopperGL {
         }
     }
 
-    private void position(MouseEvent e) {
-//        latLon = mg.getLat(e.getY()) + "," + mg.getLon(e.getX());
-//        infoPanel.repaint();
-        currentPosX = e.getX();
-        currentPosY = e.getY();
-    }
-
 //    void repaintPaths() {
 //        repaint(false, true);
+//    }
+
+//    private void position(MouseEvent e) {
+////        latLon = mg.getLat(e.getY()) + "," + mg.getLon(e.getX());
+////        infoPanel.repaint();
+////        currentPosX = e.getX();
+////        currentPosY = e.getY();
 //    }
 
     private void repaint() {
@@ -398,7 +398,11 @@ class GraphHopperGL {
     }
 
     public void window(int w, int h) {
-        new JOGL(new SpaceGraph3D() {
+        new JOGL(new DemoApplication() {
+
+            float scale = 32;
+            float lon = Float.NaN, lat = Float.NaN, alt = Float.NaN;
+
             @Override
             protected DynamicsWorld physics() {
 
@@ -408,7 +412,7 @@ class GraphHopperGL {
                 // quality and performance
                 Vector3f worldAabbMin = new Vector3f(-10000, -10000, -10000),
                         worldAabbMax = new Vector3f(10000, 10000, 10000);
-                int maxProxies = 16*1024;
+                int maxProxies = 16 * 1024;
 
                 BroadphaseInterface b =
                         new AxisSweep3(worldAabbMin, worldAabbMax, maxProxies);
@@ -417,25 +421,92 @@ class GraphHopperGL {
                 DynamicsWorld w = new DiscreteDynamicsWorld(b);
                 w.setGravity(new Vector3f());
 
-                //w.localCreateRigidBody(1, new Transform(), new BoxShape(new Vector3f(1,1,1)));
-
-                buildRoads(w);
+                final BBox bb = graph.getBounds();
+                double latMax = bb.maxLat*scale;
+                double latMin = bb.minLat*scale;
+                double lonMax = bb.maxLon*scale;
+                double lonMin = bb.minLon*scale;
+                double latR = (latMax - latMin);
+                double lonR = (lonMax - lonMin);
+                float ll = (float) Math.min(latR, lonR)/16f;
+                final BoxShape ms = new BoxShape(new Vector3f(ll, ll, ll));
+                w.localCreateRigidBody(1, new Transform((float)lonMin, (float)latMin, 0), ms);
+                w.localCreateRigidBody(1, new Transform((float)lonMin, (float)latMax, 0), ms);
+                w.localCreateRigidBody(1, new Transform((float)lonMax, (float)latMin, 0), ms);
+                w.localCreateRigidBody(1, new Transform((float)lonMax, (float)latMax, 0), ms);
+                
+                buildRoads();
 
                 return w;
             }
+
+            @Override
+            @Deprecated protected void renderHUD() {
+
+            }
+
+            @Override
+            public void updateCamera() {
+
+                if (lon!=lon)
+                    initCamera();
+
+
+                updateCamera(
+                    new Vector3f(lon*scale, lat*scale, alt),
+                    new Vector3f(lon*scale, lat*scale, 0),
+                    //new Vector3f(lon, lat, 5f),
+                    cameraUp
+                );
+            }
+
+            @Override
+            public void keyboardCallback(char key) {
+                switch(key) {
+                    case 'a': lon-=0.1; break;
+                    case 's': lon+=0.1; break;
+                    case 'x': alt=Math.max(zNear+0.0001f,alt-0.2f); break;
+                    case 'y': alt+=0.2; break;
+                }
+            }
+
+            private void initCamera() {
+                final BBox bb = graph.getBounds();
+                double latMax = bb.maxLat;
+                double latMin = bb.minLat;
+                double lonMax = bb.maxLon;
+                double lonMin = bb.minLon;
+                lon = (float) ((lonMin + lonMax) / 2);
+                lat = (float) ((latMin + latMax) / 2);
+                alt = 1.5f;
+            }
+
+            @Override
+            protected void renderVolume(GLAutoDrawable drawable) {
+                super.renderVolume(drawable);
+                drawRoads(new Vector3f(lon, lat, 0), alt/scale /* TODO calculate exact using trig */, drawable.getGL().getGL2());
+            }
+
+            void drawRoads(Vector3f center, float rad, GL2 gl) {
+
+
+                gl.glScalef(scale,scale,scale);
+                ways.collide(new DbvtAabbMm().setRadius(center, rad), new Dbvt.ICollide<>() {
+                    @Override
+                    protected void accept(Dbvt.Node<WayVis> n) {
+                        //System.out.println(n);
+                        n.data.draw(gl);
+                    }
+                });
+            }
+
+
         }, w, h);
     }
 
-    private void buildRoads(DynamicsWorld w) {
-        int max = 4900, c = 0;
+    private void buildRoads() {
+        int max = Integer.MAX_VALUE, c = 0;
 
-        final BBox bb = graph.getBounds();
-        double latMax = bb.maxLat;
-        double latMin = bb.minLat;
-        double lonMax = bb.maxLon;
-        double lonMin = bb.minLon;
-        double latR = (latMax-latMin);
-        double lonR = (lonMax-lonMin);
 
         AllEdgesIterator edge = graph.getAllEdges();
         while (edge.next()) {
@@ -448,52 +519,72 @@ class GraphHopperGL {
             double lat2 = n.getLatitude(j);
             double lon2 = n.getLongitude(j);
 
-            //plotEdge(g2, edge);
+            final WayVis v = new WayVis(edge, lat, lon, lat2, lon2);
+            double speed = edge.get(avSpeedEnc);
 
-            //normalize
-            lon = (lon - lonMin)/lonR;
-            lon2 = (lon2 - lonMin)/lonR;
-            lat = (lat - latMin)/latR;
-            lat2 = (lat2 - latMin)/latR;
+            v.thick = speed > 30 ? 7 : 4;
+            Color.getHSBColor((float) (speed/100), 1f, 0.8f).getRGBColorComponents(v.color);
 
+            ways.put(v, v.box());
 
-            //HACK temporary hard-filter
-            final double r = 0.1;
-            if (lon >= -r && lat >= -r && lon <= r && lat <= r) {
-                if (lon2 >= -r && lat2 >= -r && lon2 <= r && lat2 <= r) {
+            if (++c >= max) break;
 
-                    double scale = 400;
-                    lon *= scale;
-                    lat *= scale;
-                    lon2 *= scale;
-                    lat2 *= scale;
-                    float cx = (float) ((lon + lon2) / 2);
-                    float cy = (float) ((lat + lat2) / 2);
-
-                    final Transform t = new Transform();
-
-
-                    final Quat4f rot = new Quat4f();
-                    rot.set(new AxisAngle4f(0, 0, 1,
-                            (float) Math.atan2(lat2 - lat, lon2 - lon)));
-                    t.setRotation(rot);
-
-                    t.origin.set(cx - 20, cy - 33, 0);
-
-                    double dx = abs(lat - lat2);
-                    double dy = abs(lon - lon2);
-                    float length = (float) Math.sqrt(dx * dx + dy * dy);
-                    float thick = 0.1f; //length / 3; //HACK
-
-                    w.localCreateRigidBody(1, t, new CylinderShapeX(
-                            new Vector3f(length / 2, thick/2, thick/2)));
-
-                    if (++c >= max) break;
-                }
-            }
         }
     }
 
+    static class WayVis {
+        final int id;
+        final float lat, lon, lat2, lon2;
+        final float[] color = new float[3];
+        float thick = 1;
+
+
+        public WayVis(AllEdgesIterator edge, double lat, double lon, double lat2, double lon2) {
+            this.id = edge.getEdge();
+            this.lat = (float) lat;
+            this.lon = (float) lon;
+            this.lat2 = (float) lat2;
+            this.lon2 = (float) lon2;
+
+
+
+//            float cx = (float) ((lon + lon2) / 2);
+//            float cy = (float) ((lat + lat2) / 2);
+//
+//            final Transform t = new Transform();
+//
+//            final Quat4f rot = new Quat4f();
+//            rot.set(new AxisAngle4f(0, 0, 1,
+//                    (float) Math.atan2(lat2 - lat, lon2 - lon)));
+//            t.setRotation(rot);
+//
+//            t.origin.set(cx - 20, cy - 33, 0);
+//
+//            double dx = abs(lat - lat2);
+//            double dy = abs(lon - lon2);
+//            float thick = 0.05f; //length / 3; //HACK
+//            float density =
+//                    0;
+//            //10;
+//            float margin = thick/2;
+//            float length = Math.max(0, (float) (Math.sqrt(dx * dx + dy * dy) - margin));
+//            w.localCreateRigidBody((float) (density * length * thick * thick * Math.PI), t, new CylinderShapeX(
+//                    new Vector3f(length / 2, thick / 2, thick / 2)));
+
+        }
+
+        public DbvtAabbMm box() {
+            return new DbvtAabbMm().set(new Vector3f(lon, lat, 0), new Vector3f(lon2, lat2, 0));
+        }
+
+        public void draw(GL2 gl) {
+            gl.glBegin(GL2.GL_LINES);
+            gl.glColor3fv(color, 0);
+            gl.glVertex3f(lon, lat, 0);
+            gl.glVertex3f(lon2, lat2, 0);
+            gl.glEnd();
+        }
+    }
 
     static class GraphicsWrapper {
         private final Logger logger = LoggerFactory.getLogger(getClass());
