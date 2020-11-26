@@ -3,8 +3,8 @@ package netvr;
 import gov.nasa.worldwind.*;
 import gov.nasa.worldwind.avlist.AVKey;
 import gov.nasa.worldwind.avlist.AVList;
-import gov.nasa.worldwind.awt.WorldWindowGLCanvas;
 import gov.nasa.worldwind.event.Message;
+import gov.nasa.worldwind.examples.render.*;
 import gov.nasa.worldwind.formats.shapefile.Shapefile;
 import gov.nasa.worldwind.formats.shapefile.ShapefileRecord;
 import gov.nasa.worldwind.formats.shapefile.ShapefileRecordPoint;
@@ -14,7 +14,8 @@ import gov.nasa.worldwind.geom.Position;
 import gov.nasa.worldwind.globes.Globe;
 import gov.nasa.worldwind.layers.*;
 import gov.nasa.worldwind.layers.Earth.OSMMapnikLayer;
-import gov.nasa.worldwind.render.*;
+import gov.nasa.worldwind.ui.awt.WorldWindowGLCanvas;
+import gov.nasa.worldwind.ui.newt.WorldWindowNEWT;
 import gov.nasa.worldwind.util.Logging;
 import gov.nasa.worldwind.util.WWIO;
 import gov.nasa.worldwind.util.WWUtil;
@@ -188,6 +189,15 @@ public class WorldWindOSM {
     }
     
     public static void main(String[] args) {
+        mainNEWT();
+        //mainAWT();
+    }
+
+    private static void mainNEWT() {
+        new WorldWindowNEWT(new OSMModel(), 1024, 800);
+    }
+
+    private static void mainAWT() {
         EventQueue.invokeLater(() -> {
             JFrame f = new JFrame();
 
@@ -203,7 +213,7 @@ public class WorldWindOSM {
 
         });
     }
-    
+
     enum OpenStreetMapShapefileLoader { ;
 
         public static boolean isOSMPlacesSource(Object source) {
