@@ -13,6 +13,8 @@ import gov.nasa.worldwind.geom.LatLon;
 import gov.nasa.worldwind.geom.Position;
 import gov.nasa.worldwind.globes.Globe;
 import gov.nasa.worldwind.layers.*;
+import gov.nasa.worldwind.layers.Earth.BMNGOneImage;
+import gov.nasa.worldwind.layers.Earth.BMNGWMSLayer;
 import gov.nasa.worldwind.layers.Earth.OSMMapnikLayer;
 import gov.nasa.worldwind.ui.awt.WorldWindowGLCanvas;
 import gov.nasa.worldwind.ui.newt.WorldWindowNEWT;
@@ -49,9 +51,14 @@ public class WorldWindOSM {
             layers.add(new StarsLayer());
             layers.add(new SkyGradientLayer());
             //layers.add(new BMNGOneImage());
-            layers.add(new OSMMapnikLayer());
+            layers.add(new BMNGWMSLayer());
+            //layers.add(new OSMMapnikLayer());
             layers.add(OpenStreetMapShapefileLoader.makeLayerFromOSMPlacesSource(
-                    new File("/tmp/shp/waterways.shp")));
+                    new File(
+                            //"/tmp/shp/waterways.shp"
+                            //"/tmp/shp/roads.shp"
+                            "/tmp/shp/places.shp"
+                    )));
             this.setLayers(layers);
         }
 
@@ -278,10 +285,9 @@ public class WorldWindOSM {
 
 
 
-                                            Renderable l =
-                                                    surfaceIcons(ss, shp.getPointBuffer().getLocations());
-
-                                            layer.add(l);
+//                                            Renderable l =
+//                                                    surfaceIcons(ss, shp.getPointBuffer().getLocations());
+//                                            layer.add(l);
 
                                             for (Label v : ss.labels) {
                                                 layer.addLabel(v);
