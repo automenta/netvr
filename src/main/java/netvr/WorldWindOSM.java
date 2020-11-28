@@ -5,6 +5,7 @@ import gov.nasa.worldwind.avlist.AVKey;
 import gov.nasa.worldwind.avlist.AVList;
 import gov.nasa.worldwind.event.Message;
 import gov.nasa.worldwind.examples.render.*;
+import gov.nasa.worldwind.formats.shapefile.DBaseRecord;
 import gov.nasa.worldwind.formats.shapefile.Shapefile;
 import gov.nasa.worldwind.formats.shapefile.ShapefileRecord;
 import gov.nasa.worldwind.formats.shapefile.ShapefileRecordPoint;
@@ -18,6 +19,7 @@ import gov.nasa.worldwind.layers.Earth.BMNGWMSLayer;
 import gov.nasa.worldwind.layers.Earth.OSMMapnikLayer;
 import gov.nasa.worldwind.ui.awt.WorldWindowGLCanvas;
 import gov.nasa.worldwind.ui.newt.WorldWindowNEWT;
+import gov.nasa.worldwind.util.CompoundVecBuffer;
 import gov.nasa.worldwind.util.Logging;
 import gov.nasa.worldwind.util.WWIO;
 import gov.nasa.worldwind.util.WWUtil;
@@ -50,14 +52,15 @@ public class WorldWindOSM {
             LayerList layers = new LayerList();
             layers.add(new StarsLayer());
             layers.add(new SkyGradientLayer());
-            //layers.add(new BMNGOneImage());
             layers.add(new BMNGWMSLayer());
-            //layers.add(new OSMMapnikLayer());
+
+//            layers.add(new OSMMapnikLayer());
+
             layers.add(OpenStreetMapShapefileLoader.makeLayerFromOSMPlacesSource(
                     new File(
                             //"/tmp/shp/waterways.shp"
-                            //"/tmp/shp/roads.shp"
-                            "/tmp/shp/places.shp"
+                            "/tmp/shp/roads.shp"
+//                            "/tmp/shp/places.shp"
                     )));
             this.setLayers(layers);
         }
@@ -265,9 +268,14 @@ public class WorldWindOSM {
                 throw new IllegalArgumentException(message);
             } else {
                 OpenStreetMapShapefileLoader.OSMShapes[] shapeArray = new OpenStreetMapShapefileLoader.OSMShapes[]{
-                        new OpenStreetMapShapefileLoader.OSMShapes(Color.BLACK, 0.5D, 30000.0D), new OpenStreetMapShapefileLoader.OSMShapes(Color.GREEN, 0.5D, 100000.0D), new OpenStreetMapShapefileLoader.OSMShapes(Color.CYAN, 1.0D, 500000.0D), new OpenStreetMapShapefileLoader.OSMShapes(Color.YELLOW, 2.0D, 3000000.0D)};
+                        new OpenStreetMapShapefileLoader.OSMShapes(Color.BLACK, 0.5D, 30000.0D), new OpenStreetMapShapefileLoader.OSMShapes(Color.GREEN, 0.5D, 100000.0D), new OpenStreetMapShapefileLoader.OSMShapes(Color.CYAN, 1.0D, 500000.0D),
+                        new OpenStreetMapShapefileLoader.OSMShapes(Color.YELLOW, 2.0D, 3000000.0D),
+                        new OpenStreetMapShapefileLoader.OSMShapes(Color.ORANGE, 0.25D, 10000.0D)
+                };
 
                 OpenStreetMapShapefileLoader.TextAndShapesLayer layer = new OpenStreetMapShapefileLoader.TextAndShapesLayer();
+                layer.setPickEnabled(false);
+
 
                 while(true) {
                     ShapefileRecord record;
@@ -309,12 +317,42 @@ public class WorldWindOSM {
                                                 layer.add(new SurfacePolygon(record.asPolygonRecord().getPointBuffer(part).getLocations()));
 
                                         } else if (record.isPolylineRecord()) {
-                                            int parts = record.getNumberOfParts();
-                                            for (int part = 0; part < parts; part++) {
-                                                final SurfacePolyline line = new SurfacePolyline(record.asPolylineRecord().getPointBuffer(part).getLocations());
-                                                line.setValue("lineWidth", 8.0);
-                                                layer.add(line);
-                                            }
+                                            CompoundVecBuffer p = record.asPolylineRecord().getCompoundPointBuffer();
+
+
+                                            //..
+
+//                                            int parts = record.getNumberOfParts();
+//                                            for (int part = 0; part < parts; part++) {
+//                                                final SurfacePolyline line = new SurfacePolyline(record.asPolylineRecord().getPointBuffer(part).getLocations());
+//                                                line.setValue("lineWidth", 8.0);
+//                                                layer.add(line);
+//                                            }
+                                            final SurfacePolylines P = new SurfacePolylines(p);
+                                            P.setDragEnabled(false);
+//                                            P.setHighlighted(true);
+//                                            P.setDrawBoundingSectors(true);
+                                            P.setEnableBatchPicking(true);
+                                            layer.add(P);
+
+                                            DBaseRecord a = record.getAttributes();
+//                                            System.out.println(a.getEntries());
+                                            Object SPEED = a.getValue("maxspeed");
+                                            int speed;
+                                            if (SPEED instanceof Long) {
+                                                speed = ((Long)SPEED).intValue();
+                                            } else
+                                                speed = 0;
+
+                                            final BasicShapeAttributes lineAttr = new BasicShapeAttributes();
+                                            lineAttr.setOutlineWidth(3);
+                                            lineAttr.setDrawInterior(false);
+//                                            lineAttr.setOutlineOpacity(0.85f);
+                                            lineAttr.setOutlineMaterial(new Material(new Color(Math.min(1, speed/50f), 0, 0f)));
+
+                                            P.setAttributes(lineAttr);
+
+                                            //P.setTexelsPerEdgeInterval(10);
 
                                         }
                                     }
@@ -334,7 +372,8 @@ public class WorldWindOSM {
                             shapes = shapeArray[2];
                         } else if (type.equalsIgnoreCase("city")) {
                             shapes = shapeArray[3];
-                        }
+                        } else
+                            shapes = shapeArray[4];
                     } while(shapes == null);
 
                     String name = null;
