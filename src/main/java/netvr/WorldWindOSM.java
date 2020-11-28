@@ -1,5 +1,6 @@
 package netvr;
 
+import com.bulletphysics.collision.shapes.CompoundShape;
 import gov.nasa.worldwind.BasicModel;
 import gov.nasa.worldwind.formats.shapefile.DBaseRecord;
 import gov.nasa.worldwind.formats.shapefile.Shapefile;
@@ -14,8 +15,10 @@ import gov.nasa.worldwind.layers.SkyGradientLayer;
 import gov.nasa.worldwind.layers.StarsLayer;
 import gov.nasa.worldwind.render.*;
 import gov.nasa.worldwind.ui.newt.WorldWindowNEWT;
+import gov.nasa.worldwind.util.VecBuffer;
 import gov.nasa.worldwind.util.WWUtil;
 
+import javax.xml.stream.Location;
 import java.awt.*;
 import java.io.File;
 import java.util.ArrayList;
@@ -115,8 +118,31 @@ public class WorldWindOSM {
 
             } else if (r.isPolylineRecord()) {
 
-                final SurfacePolylines P = new SurfacePolylines(r.asPolylineRecord().getCompoundPointBuffer());
-                P.setDragEnabled(false);
+                //final SurfacePolylines P = new SurfacePolylines(r.asPolylineRecord().getCompoundPointBuffer());
+                Path P = null;
+                int pp = r.getNumberOfParts();
+                if (pp > 1)
+                    throw new UnsupportedOperationException();
+                for (int i = 0; i < pp; i++) {
+                    VecBuffer points = r.getPointBuffer(i);
+                    final int ps = points.getSize();
+                    if (ps > 0) {
+                        Iterable<LatLon> p = points.getLocations();
+                        ArrayList<Position> l = new ArrayList(ps);
+                        p.forEach(q -> {
+                            l.add(new Position(q, 0));
+                        });
+
+                        P = new Path(l);
+                        P.setDragEnabled(false);
+                        P.setOutlinePickWidth(0);
+                        P.setFollowTerrain(true);
+                        P.setSurfacePath(true);
+//                        P.setShowPositions(true);
+                        break;
+                    }
+                }
+//                P.setDragEnabled(false);
 
                 Object SPEED = attr.get("maxspeed");
                 int speed;
