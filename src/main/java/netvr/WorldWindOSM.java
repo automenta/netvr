@@ -2,10 +2,7 @@ package netvr;
 
 import com.bulletphysics.collision.shapes.CompoundShape;
 import gov.nasa.worldwind.BasicModel;
-import gov.nasa.worldwind.formats.shapefile.DBaseRecord;
-import gov.nasa.worldwind.formats.shapefile.Shapefile;
-import gov.nasa.worldwind.formats.shapefile.ShapefileRecord;
-import gov.nasa.worldwind.formats.shapefile.ShapefileRecordPoint;
+import gov.nasa.worldwind.formats.shapefile.*;
 import gov.nasa.worldwind.geom.LatLon;
 import gov.nasa.worldwind.geom.Position;
 import gov.nasa.worldwind.layers.Earth.BMNGWMSLayer;
@@ -14,6 +11,7 @@ import gov.nasa.worldwind.layers.RenderableLayer;
 import gov.nasa.worldwind.layers.SkyGradientLayer;
 import gov.nasa.worldwind.layers.StarsLayer;
 import gov.nasa.worldwind.render.*;
+import gov.nasa.worldwind.render.Polygon;
 import gov.nasa.worldwind.ui.newt.WorldWindowNEWT;
 import gov.nasa.worldwind.util.VecBuffer;
 import gov.nasa.worldwind.util.WWUtil;
@@ -36,7 +34,9 @@ public class WorldWindOSM {
     }
 
     private static void mainNEWT() {
-        new WorldWindowNEWT(new OSMModel(), 1024, 800);
+
+        final WorldWindowNEWT w = new WorldWindowNEWT(new OSMModel(), 1024, 800);
+//        w.view().goTo(new Position(LatLon.fromDegrees(24.907,54.854), 0), 400);
     }
 
     static class OSMModel extends BasicModel {
@@ -50,9 +50,12 @@ public class WorldWindOSM {
 
 //            layers.add(new OSMMapnikLayer());
 
-            l.add(new ShapefileLayer(new Shapefile(new File("/tmp/shp/roads.shp"))));
-            l.add(new ShapefileLayer(new Shapefile(new File("/tmp/shp/places.shp"))));
-            l.add(new ShapefileLayer(new Shapefile(new File("/tmp/shp/waterways.shp"))));
+//            l.add(new ShapefileLayer(new Shapefile(new File("/tmp/shp1/roads.shp"))));
+            l.add(new ShapefileLayer(new Shapefile(new File("/tmp/shp1/places.shp"))));
+            l.add(new ShapefileLayer(new Shapefile(new File("/tmp/shp1/waterways.shp"))));
+            l.add(new ShapefileLayer(new Shapefile(new File("/tmp/shp1/buildings.shp"))));
+            l.add(new ShapefileLayer(new Shapefile(new File("/tmp/shp1/natural.shp"))));
+            l.add(new ShapefileLayer(new Shapefile(new File("/tmp/shp1/landuse.shp"))));
             setLayers(l);
 
         }
@@ -70,6 +73,7 @@ public class WorldWindOSM {
         private final Shapefile shp;
 
         public ShapefileLayer(Shapefile shp) {
+            setMaxActiveAltitude(10000);
             this.shp = shp;
             setPickEnabled(false);
 
@@ -111,10 +115,29 @@ public class WorldWindOSM {
 
             if (r.isPolygonRecord()) {
 
+                final ShapefileRecordPolygon R = r.asPolygonRecord();
+                int parts = R.getNumberOfParts();
+                for (int x = 0; x < parts; x++) {
+                    SurfacePolygon p = new SurfacePolygon(positions(R, x));
+                    //Polygon p = new Polygon(positions(R, x));
+                    //SurfacePolygons p = new SurfacePolygons(r.asPolygonRecord().getCompoundPointBuffer());
+                    p.setDragEnabled(false);
 
-                SurfacePolygons p = new SurfacePolygons(r.asPolygonRecord().getCompoundPointBuffer());
-                p.setDragEnabled(false);
-                add(p);
+
+//                    p.setOutlinePickWidth(0);
+
+//                    p.setAltitudeMode(1);
+                    final ShapeAttributes aa = new BasicShapeAttributes();
+                    //aa.setOutlineWidth(3);
+                    aa.setInteriorOpacity(0.5f);
+                    aa.setDrawInterior(true);
+                    aa.setDrawOutline(false);
+                    aa.setInteriorMaterial(new Material(new Color(1, 1, 1f)));
+
+                    p.setAttributes(aa);
+
+                    add(p);
+                }
 
             } else if (r.isPolylineRecord()) {
 
@@ -124,15 +147,9 @@ public class WorldWindOSM {
                 if (pp > 1)
                     throw new UnsupportedOperationException();
                 for (int i = 0; i < pp; i++) {
-                    VecBuffer points = r.getPointBuffer(i);
-                    final int ps = points.getSize();
-                    if (ps > 0) {
-                        Iterable<LatLon> p = points.getLocations();
-                        ArrayList<Position> l = new ArrayList(ps);
-                        p.forEach(q -> {
-                            l.add(new Position(q, 0));
-                        });
+                    ArrayList<Position> l = positions(r, i);
 
+                    if (l!=null) {
                         P = new Path(l);
                         P.setDragEnabled(false);
                         P.setOutlinePickWidth(0);
@@ -205,6 +222,22 @@ public class WorldWindOSM {
                 System.out.println("unknown: " + r);
             }
 
+        }
+
+
+        static private ArrayList<Position> positions(ShapefileRecord r, int i) {
+            ArrayList<Position> l;
+            VecBuffer points = r.getPointBuffer(i);
+            final int ps = points.getSize();
+            if (ps > 0) {
+                Iterable<LatLon> p = points.getLocations();
+                l = new ArrayList(ps);
+                p.forEach(q -> {
+                    l.add(new Position(q, 0));
+                });
+            }
+            else l = null;
+            return l;
         }
 
         protected boolean include(double[] boundingRectangle) {
